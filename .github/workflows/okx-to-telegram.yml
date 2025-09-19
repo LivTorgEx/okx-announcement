@@ -2,7 +2,8 @@ name: OKX → Telegram
 
 on:
   schedule:
-    - cron: '*/5 * * * *'  # every 5 minutes
+    - cron: '*/5 * * * *'   # every 5 minutes
+  workflow_dispatch:        # allow manual run
 
 jobs:
   notify:
@@ -12,31 +13,51 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y jq
 
       - name: Fetch announcements
+        id: fetch
         run: |
           curl -s 'https://www.okx.com/api/v5/support/announcements' -o /tmp/okx.json
-          # Get current timestamp in seconds
           NOW=$(date +%s)
-          # Filter announcements published in the last 5 minutes
-          jq --arg now "$NOW" '
-            .data[]
-            | select(((.createTime | tonumber) / 1000) > ($now|tonumber - 300))
-            | {title: .title, url: .url, ts: .createTime}
-          ' /tmp/okx.json > /tmp/new.json
-          cat /tmp/new.json
+
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            # Manual run: take the latest announcement only
+            jq -r '
+              .data[0].details[0]
+              | {title: .title, url: .url, pTime: .pTime, annType: .annType}
+            ' /tmp/okx.json > /tmp/to_send.json
+          else
+            # Scheduled run: only announcements within last 5 minutes
+            jq --arg now "$NOW" '
+              .data[].details[]
+              | select(((.pTime | tonumber) / 1000) > ($now|tonumber - 300))
+              | {title: .title, url: .url, pTime: .pTime, annType: .annType}
+            ' /tmp/okx.json > /tmp/to_send.json
+          fi
+
+          cat /tmp/to_send.json
 
       - name: Send to Telegram
-        if: success()
         env:
           BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
-          if [ -s /tmp/new.json ]; then
-            jq -c '.[]' /tmp/new.json | while read item; do
-              TITLE=$(echo "$item" | jq -r '.title')
-              URL=$(echo "$item" | jq -r '.url')
-              TEXT="$TITLE%0A$URL"
-              curl -s "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage?chat_id=${CHAT_ID}&text=${TEXT}"
+          if [ -s /tmp/to_send.json ]; then
+            jq -c '.' /tmp/to_send.json | while read ann; do
+              TITLE=$(echo "$ann" | jq -r '.title')
+              URL=$(echo "$ann" | jq -r '.url')
+              PUBLISHED=$(echo "$ann" | jq -r '.pTime')
+              ANNTYPE=$(echo "$ann" | jq -r '.annType')
+              DATE=$(date -d @"$(($PUBLISHED/1000))" "+%Y-%m-%d %H:%M:%S UTC")
+
+              TEXT="*Title:* $TITLE%0A*Type:* $ANNTYPE%0A*Date:* $DATE%0A%0A[Read more]($URL)"
+
+              curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
+                -H "Content-Type: application/json" \
+                -d "{
+                  \"chat_id\": \"${CHAT_ID}\",
+                  \"text\": \"${TEXT}\",
+                  \"parse_mode\": \"Markdown\"
+                }"
             done
           else
-            echo "No new announcements in the last 5 minutes"
+            echo "No new announcements"
           fi

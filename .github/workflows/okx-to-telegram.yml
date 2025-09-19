@@ -22,6 +22,8 @@ jobs:
             -o /tmp/okx.json
           NOW=$(date +%s)
 
+          cat /tmp/okx.json
+
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             # Manual run: take the latest announcement only
             jq -r '

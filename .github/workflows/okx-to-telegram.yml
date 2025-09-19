@@ -48,7 +48,7 @@ jobs:
               ANNTYPE=$(echo "$ann" | jq -r '.annType')
               DATE=$(date -d @"$(($PUBLISHED/1000))" "+%Y-%m-%d %H:%M:%S UTC")
 
-              TEXT="📢 *$TITLE*%0A%0A🗂️ Type: \`$ANNTYPE\`%0A🕒 Date: $DATE%0A%0A👉 [Read more]($URL)"
+              TEXT="📢 *$TITLE*\n👉 [Read more]($URL)"
 
               curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
                 -H "Content-Type: application/json" \

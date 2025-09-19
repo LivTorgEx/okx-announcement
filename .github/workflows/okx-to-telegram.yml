@@ -50,14 +50,27 @@ jobs:
 
               TEXT="*Title:* $TITLE%0A*Type:* $ANNTYPE%0A*Date:* $DATE%0A%0A[Read more]($URL)"
 
-              curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
+              # Debug output (mask token for logs)
+              echo "=== DEBUG TELEGRAM REQUEST ==="
+              echo "BOT_TOKEN (first 10 chars): ${BOT_TOKEN:0:10}..."
+              echo "CHAT_ID: $CHAT_ID"
+              echo "MESSAGE: $TEXT"
+              echo "================================"
+
+              # Actual request
+              RESPONSE=$(curl -s -w "\nHTTP_CODE:%{http_code}\n" -X POST \
+                "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
                 -H "Content-Type: application/json" \
                 -d "{
                   \"chat_id\": \"${CHAT_ID}\",
                   \"text\": \"${TEXT}\",
                   \"parse_mode\": \"Markdown\"
-                }"
+                }")
+
+              echo "Telegram API response:"
+              echo "$RESPONSE"
             done
           else
             echo "No new announcements"
           fi
+
